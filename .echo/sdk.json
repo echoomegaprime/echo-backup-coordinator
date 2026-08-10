@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "name": "echo-backup-coordinator",
+  "capabilities": [],
+  "note": "NOT claiming echo.backup.* -- a broad %backup% search found 10 capabilities under that exact namespace (add_target, health, list_restore_points, list_targets, recent_runs, record_run, retention_sweep, trigger_run, update_target, verify_run), conceptually near-identical to this repo's job (backup targets, retention, trigger/verify a run). But they point to a DIFFERENT backend: target_url /sdk/backup/* on FORGE's echo-worker-server (routers/backup_router.py + backup.py), not this Cloudflare Worker's own D1/KV/R2. This repo has no service binding or fetch call to that FORGE router anywhere in src/index.ts. All 10 are marked health_status=orphaned in arcanum_sdk.sdk_capabilities, but a direct curl to http://127.0.0.1:8000/sdk/backup/health returned 405 (route exists, wrong method) not 404 -- so 'orphaned' looks like a stale probe result, not proof of a dead system (known false-status pattern per CLAUDE.md). Filed as queue #29519-class follow-up rather than silently reconciled or ignored: two backup-coordination systems appear to exist in parallel and someone needs to decide whether they should be merged, or are intentionally separate (fleet-wide SDK-driven vs this Worker's own D1-backed cron jobs).",
+  "entrypoints": ["scripts/certforge_journey.py"],
+  "data_classification": "restricted",
+  "network": "none"
+}
