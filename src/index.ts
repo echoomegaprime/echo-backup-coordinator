@@ -75,10 +75,21 @@ function cors(): Response {
   });
 }
 
-function checkAuth(request: Request, env: Env): boolean {
+export function timingSafeEqual(a: string | undefined | null, b: string | undefined | null): boolean {
+  if (!a || !b) return false;
+  const enc = new TextEncoder(); const bufA = enc.encode(a); const bufB = enc.encode(b);
+  const len = Math.max(bufA.length, bufB.length, 1);
+  const padA = new Uint8Array(len); const padB = new Uint8Array(len);
+  padA.set(bufA); padB.set(bufB);
+  let diff = bufA.length ^ bufB.length;
+  for (let i = 0; i < len; i++) diff |= padA[i] ^ padB[i];
+  return diff === 0;
+}
+
+export function checkAuth(request: Request, env: Env): boolean {
   if (!env.ECHO_API_KEY) return false;
   const key = request.headers.get('X-Echo-API-Key');
-  return key === env.ECHO_API_KEY;
+  return timingSafeEqual(key, env.ECHO_API_KEY);
 }
 
 // ─── KV-Based Rate Limiting ─────────────────────────────────────────────────
@@ -1377,8 +1388,10 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
 
   await ensureSchema(env.DB);
 
-  // Dashboard
-  if (path === '/' && method === 'GET') return handleDashboard(env);
+  // Dashboard -- was `path === '/'` here, which is dead code: the unauthenticated
+  // `/` check above already returns before auth is ever checked, so this branch
+  // could never run and the HTML dashboard was completely unreachable.
+  if (path === '/dashboard' && method === 'GET') return handleDashboard(env);
 
   // Stats
   if (path === '/stats' && method === 'GET') return handleStats(env);
@@ -1418,7 +1431,7 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
     error: 'Not Found',
     endpoints: [
       'GET  /health',
-      'GET  /           (dashboard)',
+      'GET  /dashboard  (HTML dashboard)',
       'GET  /stats',
       'GET  /backups',
       'GET  /backups/:id',
