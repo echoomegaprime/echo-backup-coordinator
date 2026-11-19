@@ -17,6 +17,8 @@ jobs:
     steps:
       - name: Check out exact source
         uses: actions/checkout@v4
+      - name: Check local backup restore and capacity forecasts
+        run: python3 -m unittest discover -s tests -p 'test_local_backup_check.py' -v
       - name: Configure Node
         uses: actions/setup-node@v4
         with:
