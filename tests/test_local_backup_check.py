@@ -60,6 +60,32 @@ class TrendTests(unittest.TestCase):
         for history in ([], [recent]):
             self.assertEqual(backup.trend(self.current, history)["status"], "insufficient_history")
 
+    def test_recovered_dip_is_visible_with_flat_endpoint_rate(self):
+        start = dict(self.current, observed_utc="2026-11-16T10:00:00+00:00")
+        dip = dict(self.current, observed_utc="2026-11-19T06:00:00+00:00", free_bytes=150)
+        result = backup.trend(self.current, [dip, start, dict(dip)])
+        self.assertEqual(result["net_bytes_used_per_day"], 0)
+        self.assertIsNone(result["days_to_full"])
+        self.assertEqual(result["capacity_window"], {
+            "observations": 3, "minimum_free_bytes": 150,
+            "minimum_free_utc": dip["observed_utc"], "largest_observed_drop_bytes": 250})
+
+    def test_drawdown_requires_peak_before_trough_and_excludes_old_samples(self):
+        old = dict(self.current, observed_utc="2026-10-01T10:00:00+00:00", free_bytes=0)
+        low = dict(self.current, observed_utc="2026-11-19T04:00:00+02:00", free_bytes=100)
+        high = dict(self.current, observed_utc="2026-11-19T03:00:00+00:00", free_bytes=600)
+        result = backup.trend(self.current, [high, old, low])
+        self.assertEqual(result["status"], "insufficient_history")
+        self.assertEqual(result["capacity_window"], {
+            "observations": 3, "minimum_free_bytes": 100,
+            "minimum_free_utc": "2026-11-19T02:00:00+00:00", "largest_observed_drop_bytes": 200})
+
+    def test_conflicting_readings_at_same_instant_fail(self):
+        recent = dict(self.current, observed_utc="2026-11-19T09:00:00+00:00")
+        conflicting = dict(recent, observed_utc="2026-11-19T10:00:00+01:00", free_bytes=150)
+        with self.assertRaisesRegex(ValueError, "conflicting"):
+            backup.trend(self.current, [recent, conflicting])
+
     def test_rejects_other_volume_and_invalid_time(self):
         for prior in (dict(self.current, device="other"), dict(self.current, host="other"),
                       dict(self.current, total_bytes=900), self.current):

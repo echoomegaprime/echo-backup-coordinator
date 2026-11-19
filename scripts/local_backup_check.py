@@ -41,24 +41,39 @@ def capacity(directory):
 
 def trend(current, previous):
     now = datetime.fromisoformat(current["observed_utc"])
-    usable = []
+    readings = {now: current["free_bytes"]}
     for p in previous:
         if any(p[k] != current[k] for k in ("device", "host", "total_bytes")):
             raise ValueError("history belongs to another host, filesystem or capacity")
         dt = datetime.fromisoformat(p["observed_utc"])
-        if dt.tzinfo is None or dt >= now or type(p["free_bytes"]) is not int or not 0 <= p["free_bytes"] <= current["total_bytes"]:
+        free = p["free_bytes"]
+        if dt.tzinfo is None or dt >= now or type(free) is not int or not 0 <= free <= current["total_bytes"]:
             raise ValueError("invalid capacity history")
-        if timedelta(days=1) <= now - dt <= timedelta(days=30):
-            usable.append((dt, p["free_bytes"]))
-    if not usable:
-        return {"status": "insufficient_history", "days_to_full": None}
-    first, free = min(usable)
+        if now - dt <= timedelta(days=30):
+            if dt in readings and readings[dt] != free:
+                raise ValueError("conflicting capacity readings at the same time")
+            readings[dt] = free
+
+    timeline = sorted(readings.items())
+    first, initial_free = timeline[0]
+    low_time, low_free = min(timeline, key=lambda observation: observation[1])
+    peak = initial_free
+    largest_drop = 0
+    for _, free in timeline:
+        peak = max(peak, free)
+        largest_drop = max(largest_drop, peak - free)
+    window = {"observations": len(timeline), "minimum_free_bytes": low_free,
+              "minimum_free_utc": low_time.astimezone(timezone.utc).isoformat(),
+              "largest_observed_drop_bytes": largest_drop}
+    if now - first < timedelta(days=1):
+        return {"status": "insufficient_history", "days_to_full": None, "capacity_window": window}
     span = (now - first).total_seconds() / 86400
-    loss = (free - current["free_bytes"]) / span
+    loss = (initial_free - current["free_bytes"]) / span
     return {"status": "declining" if loss > 0 else "stable_or_growing",
             "start_utc": first.isoformat(), "span_days": round(span, 3),
             "net_bytes_used_per_day": round(loss, 2),
-            "days_to_full": round(current["free_bytes"] / loss, 2) if loss > 0 else None}
+            "days_to_full": round(current["free_bytes"] / loss, 2) if loss > 0 else None,
+            "capacity_window": window}
 
 
 def windows_reserved(name):
