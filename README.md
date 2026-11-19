@@ -25,6 +25,12 @@ retention enforcement, with a real HTML operations dashboard.
 `/restore/:backup_id` is a non-destructive verification step -- it checks the R2 object exists,
 verifies its content hash, and reports readiness; it does not itself replay data into D1.
 
+## Local volume capacity and sample restore
+
+Run `python scripts/local_backup_check.py --help` on the host that owns the archive (Python 3.11+). With only `--source`, the command reads the host, filesystem device ID, total space, available space and timestamp. Preserve its JSON output away from the archive. Pass earlier outputs with repeated `--previous` arguments to report the net daily change and, when free space is falling, a linear days-to-full estimate. Estimates require at least 24 hours between observations, use at most 30 days, and reject a changed host, filesystem or size.
+
+For an on-demand sample restore, identify the source volume independently and supply its expected device ID with `--expect-device`, an existing separate-volume directory with `--scratch`, and a trusted reference JSON with `--manifest`. The reference's `restored_files` list contains `name`, `bytes` and `raw_source_and_restore_sha256` for each plain file directly inside the source directory. Each file is copied to fresh temporary storage, closed, reopened and independently hashed. A mismatch exits nonzero. The successful JSON receipt covers the listed files only. The operator runs this check on the archive host; the Cloudflare cron has no filesystem access to these volumes.
+
 ## Authentication
 
 Every route other than `/` and `/health` requires `X-Echo-API-Key`, compared to
